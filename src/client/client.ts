@@ -28,7 +28,7 @@ const material = new THREE.MeshBasicMaterial({
 
 const cube = new THREE.Mesh(geometry, material);
 scene.add(cube);
-
+scene.add(new THREE.AxesHelper(5));
 window.addEventListener("resize", onWindowResize, false);
 function onWindowResize() {
    camera.aspect = window.innerWidth / window.innerHeight;
@@ -41,13 +41,25 @@ document.body.appendChild(stats.dom);
 const gui = new GUI();
 
 const cubeFolder = gui.addFolder("Cube");
-cubeFolder.add(cube.rotation, "x", 0, Math.PI * 2);
-cubeFolder.add(cube.rotation, "y", 0, Math.PI * 2);
-cubeFolder.add(cube.rotation, "z", 0, Math.PI * 2);
+const cubeRotationFolder = gui.addFolder("Rotation");
+cubeRotationFolder.add(cube.rotation, "x", 0, Math.PI * 2);
+cubeRotationFolder.add(cube.rotation, "y", 0, Math.PI * 2);
+cubeRotationFolder.add(cube.rotation, "z", 0, Math.PI * 2);
+cubeRotationFolder.open();
+
+const cubePositionFolder = gui.addFolder("Position");
+cubePositionFolder.add(cube.position, "x", -10, 10, 0.1);
+cubePositionFolder.add(cube.position, "y", -10, 10, 0.1);
+cubePositionFolder.add(cube.position, "z", -10, 10, 0.1);
+cubePositionFolder.open();
+
+const cubeScaleFolder = gui.addFolder("Scale");
+cubeScaleFolder.add(cube.scale, "x", -5, 5);
+cubeScaleFolder.add(cube.scale, "y", -5, 5);
+cubeScaleFolder.add(cube.scale, "z", -5, 5);
+cubeScaleFolder.open();
+cubeFolder.add(cube, "visible");
 cubeFolder.open();
-const cameraFolder = gui.addFolder("Camera");
-cameraFolder.add(camera.position, "z", 0, 10);
-cameraFolder.open();
 
 function animate() {
    requestAnimationFrame(animate);
