@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { GLTF, GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import Stats from "three/examples/jsm/libs/stats.module";
 
 const scene = new THREE.Scene();
@@ -11,87 +12,138 @@ const camera = new THREE.PerspectiveCamera(
    0.1,
    1000
 );
-camera.position.y = 1;
-camera.position.z = 2;
+camera.position.set(4, 4, 4);
 
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-const menuPanel = document.getElementById("menuPanel") as HTMLDivElement;
-const startButton = document.getElementById("startButton") as HTMLInputElement;
-startButton.addEventListener(
-   "click",
-   function () {
-      controls.lock();
-   },
-   false
-);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
 
-const controls = new PointerLockControls(camera, renderer.domElement);
-// controls.addEventListener('change', () => console.log("Controls Change"))
-controls.addEventListener("lock", () => (menuPanel.style.display = "none"));
-controls.addEventListener("unlock", () => (menuPanel.style.display = "block"));
+let mixer: THREE.AnimationMixer;
+let modelReady = false;
 
-const planeGeometry = new THREE.PlaneGeometry(100, 100, 50, 50);
-const material = new THREE.MeshBasicMaterial({
-   color: "gray",
-   wireframe: false,
-});
-const plane = new THREE.Mesh(planeGeometry, material);
-plane.rotateX(-Math.PI / 2);
-scene.add(plane);
+const gltfLoader = new GLTFLoader();
 
-const cubes: THREE.Mesh[] = [];
-for (let i = 0; i < 100; i++) {
-   const geo = new THREE.BoxGeometry(
-      Math.random() * 4,
-      Math.random() * 16,
-      Math.random() * 4
-   );
-   const mat = new THREE.MeshBasicMaterial({ wireframe: false });
-   switch (i % 3) {
-      case 0:
-         mat.color = new THREE.Color(0xff0000);
-         break;
-      case 1:
-         mat.color = new THREE.Color(0xffff00);
-         break;
-      case 2:
-         mat.color = new THREE.Color(0x0000ff);
-         break;
-   }
-   const cube = new THREE.Mesh(geo, mat);
-   cubes.push(cube);
-}
-cubes.forEach((c) => {
-   c.position.x = Math.random() * 100 - 50;
-   c.position.z = Math.random() * 100 - 50;
-   c.geometry.computeBoundingBox();
-   c.position.y =
-      ((c.geometry.boundingBox as THREE.Box3).max.y -
-         (c.geometry.boundingBox as THREE.Box3).min.y) /
-      2;
-   scene.add(c);
-});
+const dropzone = document.getElementById("dropzone") as HTMLDivElement;
 
-const onKeyDown = function (event: KeyboardEvent) {
-   switch (event.code) {
-      case "KeyW":
-         controls.moveForward(0.25);
-         break;
-      case "KeyA":
-         controls.moveRight(-0.25);
-         break;
-      case "KeyS":
-         controls.moveForward(-0.25);
-         break;
-      case "KeyD":
-         controls.moveRight(0.25);
-         break;
-   }
+dropzone.ondragover = dropzone.ondragenter = function (evt) {
+   evt.preventDefault();
 };
-document.addEventListener("keydown", onKeyDown, false);
+dropzone.ondrop = function (evt: DragEvent) {
+   evt.stopPropagation();
+   evt.preventDefault();
+
+   //clear the scene
+   for (let i = scene.children.length - 1; i >= 0; i--) {
+      scene.remove(scene.children[i]);
+   }
+   //clear the checkboxes
+   const myNode = document.getElementById("animationsPanel") as HTMLDivElement;
+   while (myNode.firstChild) {
+      myNode.removeChild(myNode.lastChild as any);
+   }
+
+   const axesHelper = new THREE.AxesHelper(5);
+   scene.add(axesHelper);
+
+   const light1 = new THREE.DirectionalLight(new THREE.Color(0xffcccc), 2);
+   light1.position.set(-1, 1, 1);
+   scene.add(light1);
+
+   const light2 = new THREE.DirectionalLight(new THREE.Color(0xccffcc), 2);
+   light2.position.set(1, 1, 1);
+   scene.add(light2);
+
+   const light3 = new THREE.DirectionalLight(new THREE.Color(0xccccff), 2);
+   light3.position.set(0, -1, 0);
+   scene.add(light3);
+
+   const files = (evt.dataTransfer as DataTransfer).files;
+   const reader = new FileReader();
+   reader.onload = function () {
+      gltfLoader.parse(
+         reader.result as string,
+         "/",
+         (gltf: GLTF) => {
+            console.log(gltf.scene);
+
+            mixer = new THREE.AnimationMixer(gltf.scene);
+
+            console.log(gltf.animations);
+
+            if (gltf.animations.length > 0) {
+               const animationsPanel = document.getElementById(
+                  "animationsPanel"
+               ) as HTMLDivElement;
+               const ul = document.createElement("UL") as HTMLUListElement;
+               const ulElem = animationsPanel.appendChild(ul);
+
+               gltf.animations.forEach((a: THREE.AnimationClip, i) => {
+                  const li = document.createElement("UL") as HTMLLIElement;
+                  const liElem = ulElem.appendChild(li);
+
+                  const checkBox = document.createElement(
+                     "INPUT"
+                  ) as HTMLInputElement;
+                  checkBox.id = "checkbox_" + i;
+                  checkBox.type = "checkbox";
+                  checkBox.addEventListener("change", (e: Event) => {
+                     if ((e.target as HTMLInputElement).checked) {
+                        mixer.clipAction((gltf as any).animations[i]).play();
+                     } else {
+                        mixer.clipAction((gltf as any).animations[i]).stop();
+                     }
+                  });
+                  liElem.appendChild(checkBox);
+
+                  const label = document.createElement(
+                     "LABEL"
+                  ) as HTMLLabelElement;
+                  label.htmlFor = "checkbox_" + i;
+                  label.innerHTML = a.name;
+                  liElem.appendChild(label);
+               });
+
+               if (gltf.animations.length > 1) {
+                  const btnPlayAll = document.getElementById(
+                     "btnPlayAll"
+                  ) as HTMLButtonElement;
+                  btnPlayAll.addEventListener("click", (e: Event) => {
+                     mixer.stopAllAction();
+                     gltf.animations.forEach((a: THREE.AnimationClip) => {
+                        mixer.clipAction(a).play();
+                     });
+                  });
+
+                  btnPlayAll.style.display = "block";
+               }
+            } else {
+               const animationsPanel = document.getElementById(
+                  "animationsPanel"
+               ) as HTMLDivElement;
+               animationsPanel.innerHTML = "No animations found in model";
+            }
+
+            //Center model in view
+            const box = new THREE.Box3().setFromObject(gltf.scene);
+            const center = box.getCenter(new THREE.Vector3());
+            gltf.scene.position.x += gltf.scene.position.x - center.x;
+            gltf.scene.position.y += gltf.scene.position.y - center.y;
+            gltf.scene.position.z += gltf.scene.position.z - center.z;
+
+            scene.add(gltf.scene);
+
+            modelReady = true;
+         },
+         (error) => {
+            console.log(error);
+         }
+      );
+   };
+   reader.readAsArrayBuffer(files[0]);
+};
 
 window.addEventListener("resize", onWindowResize, false);
 function onWindowResize() {
@@ -104,10 +156,14 @@ function onWindowResize() {
 const stats = new Stats();
 document.body.appendChild(stats.dom);
 
+const clock = new THREE.Clock();
+
 function animate() {
    requestAnimationFrame(animate);
 
-   //controls.update()
+   controls.update();
+
+   if (modelReady) mixer.update(clock.getDelta());
 
    render();
 
